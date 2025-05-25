@@ -150,6 +150,32 @@ def _standardize_helper(f: Formula, env: Dict[str, str]) -> Formula:
     return f
 
 
+def _to_prenex(f: Formula) -> Formula:
+    quantifiers, matrix = _pull_quantifiers(f) # Gets a list of quantifiers in order and the formula that follows without any quantifiers
+    # Rebuilds the statements starting with the quantifiers from right to left
+    for q in reversed(quantifiers):
+        if isinstance(q, ForAll):
+            matrix = ForAll(q.var, matrix)
+        else:
+            matrix = Exists(q.var, matrix)
+    return matrix
+
+def _pull_quantifiers(f: Formula) -> tuple[list[Union[ForAll, Exists]], Formula]:
+    #Remove the quantifier and ands it into a list to preserve order
+    if isinstance(f, (ForAll, Exists)):
+        qs, body = _pull_quantifiers(f.sub)
+        return [f] + qs, body
+    elif isinstance(f, And):
+        ql1, f1 = _pull_quantifiers(f.left)
+        ql2, f2 = _pull_quantifiers(f.right)
+        return ql1 + ql2, And(f1, f2)
+    elif isinstance(f, Or):
+        ql1, f1 = _pull_quantifiers(f.left)
+        ql2, f2 = _pull_quantifiers(f.right)
+        return ql1 + ql2, Or(f1, f2)
+    else:
+        return [], f
+
     
 
 if __name__ == '__main__':

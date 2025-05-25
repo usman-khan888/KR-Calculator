@@ -1,6 +1,6 @@
 import pytest
 from logic_syntax import Var, Not, And, Or, Implies, Iff, ForAll, Exists
-from clausal_form import _eliminate_iff, _eliminate_imp, _push_not_inward, _standardize_vars
+from clausal_form import _eliminate_iff, _eliminate_imp, _push_not_inward, _standardize_vars, _to_prenex
 
 # Aliases for brevity
 P = Var("P")
@@ -129,3 +129,47 @@ def test_shadowing_is_local():
     assert out.sub.left == Var(outer_var)
     assert out.sub.right.sub.left == Var(inner_var)
     assert out.sub.right.sub.right == Var(inner_var)
+
+def test_prenex_flat():
+    # ∀x. ∃y. (P ∧ Q) — already in prenex
+    f = ForAll("x", Exists("y", And(Var("P"), Var("Q"))))
+    out = _to_prenex(f)
+    assert isinstance(out, ForAll)
+    assert isinstance(out.sub, Exists)
+    assert isinstance(out.sub.sub, And)
+
+def test_prenex_nested():
+    # ∃z. (∀x. (P ∧ ∃y. Q)) → ∃z. ∀x. ∃y. (P ∧ Q)
+    inner = Exists("y", Var("Q"))
+    mid = ForAll("x", And(Var("P"), inner))
+    f = Exists("z", mid)
+    out = _to_prenex(f)
+    assert isinstance(out, Exists)
+    assert isinstance(out.sub, ForAll)
+    assert isinstance(out.sub.sub, Exists)
+
+def test_prenex_or():
+    # ∀x. (P ∨ ∃y. Q) → ∀x. ∃y. (P ∨ Q)
+    inner = Exists("y", Var("Q"))
+    f = ForAll("x", Or(Var("P"), inner))
+    out = _to_prenex(f)
+    assert isinstance(out, ForAll)
+    assert isinstance(out.sub, Exists)
+    assert isinstance(out.sub.sub, Or)
+
+def test_prenex_no_quantifiers():
+    # P ∧ Q — no quantifiers
+    f = And(Var("P"), Var("Q"))
+    out = _to_prenex(f)
+    assert out == f
+
+def test_prenex_mixed_branches():
+    # ∃x. (P ∧ ∀y. Q) → ∃x. ∀y. (P ∧ Q)
+    left = Var("P")
+    right = ForAll("y", Var("Q"))
+    f = Exists("x", And(left, right))
+    out = _to_prenex(f)
+    assert isinstance(out, Exists)
+    assert isinstance(out.sub, ForAll)
+    assert isinstance(out.sub.sub, And)
+
