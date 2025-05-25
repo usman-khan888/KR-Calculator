@@ -1,5 +1,12 @@
 from logic_syntax import *
 from structure import *
+from itertools import count
+
+
+_var_counter = count()
+
+
+
 
 def clausal_form_converter(formula: Formula) -> List[Clause]:
     f1 = _eliminate_iff_imp(formula)
@@ -106,7 +113,43 @@ def _push_not_inward(f: Formula) -> Formula:
     return f # Var
 
 
-def _standardize_vars(f2):
+def _fresh_var(base: str) -> str:
+    return f"{base}_{next(_var_counter)}"
+
+def _standardize_vars(formula: Formula) -> Formula:
+    return _standardize_helper(formula, {})
+
+def _standardize_helper(f: Formula, env: Dict[str, str]) -> Formula:
+    if isinstance(f, Var):
+        return Var(env.get(f.name, f.name))
+
+    if isinstance(f, ForAll):
+        new_var = _fresh_var(f.var)
+        new_env = env.copy()
+        new_env[f.var] = new_var
+        return ForAll(new_var, _standardize_helper(f.sub, new_env))
+
+    if isinstance(f, Exists):
+        new_var = _fresh_var(f.var)
+        new_env = env.copy()
+        new_env[f.var] = new_var
+        return Exists(new_var, _standardize_helper(f.sub, new_env))
+
+    if isinstance(f, Not):
+        return Not(_standardize_helper(f.sub, env))
+
+    if isinstance(f, And):
+        return And(_standardize_helper(f.left, env), _standardize_helper(f.right, env))
+    if isinstance(f, Or):
+        return Or(_standardize_helper(f.left, env), _standardize_helper(f.right, env))
+    if isinstance(f, Implies):
+        return Implies(_standardize_helper(f.provided, env), _standardize_helper(f.then, env))
+    if isinstance(f, Iff):
+        return Iff(_standardize_helper(f.left, env), _standardize_helper(f.right, env))
+
+    return f
+
+
     
 
 if __name__ == '__main__':
