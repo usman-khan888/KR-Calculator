@@ -13,11 +13,12 @@ def clausal_form_converter(formula: Formula) -> List[Clause]:
     f2 = _push_not_inward(f1)
     f3 = _standardize_vars(f2)
     f4 = _to_prenex(f3)
-    f5 = _skolemize(f4)
-    f6 = _drop_universals(f5)
-    f7 = _distribute_or_over_and(f6)
-    flat = _flatten_ands(f7)
-    return _extract_clauses(flat)
+    #f5 = _skolemize(f4)
+    #f6 = _drop_universals(f5)
+    #f7 = _distribute_or_over_and(f6)
+    #flat = _flatten_ands(f7)
+    #return _extract_clauses(flat)
+    return f4
 
 def _eliminate_iff_imp(formula: Formula) -> Formula:
     f = _eliminate_iff(formula)
@@ -96,7 +97,7 @@ def _push_not_inward(f: Formula) -> Formula:
             # ¬∃x.A ≡ ∀x.¬A
             return ForAll(sub.var, _push_not_inward(Not(sub.sub)))
         
-        return f  # Not(Var)
+        return f  # Not(Literal)
     
     if isinstance(f, And):
         return And(_push_not_inward(f.left), _push_not_inward(f.right))
@@ -110,8 +111,7 @@ def _push_not_inward(f: Formula) -> Formula:
     if isinstance(f, Exists):
         return Exists(f.var, _push_not_inward(f.sub))
     
-    return f # Var
-
+    return f # Literal
 
 def _fresh_var(base: str) -> str:
     return f"{base}_{next(_var_counter)}"
@@ -120,9 +120,6 @@ def _standardize_vars(formula: Formula) -> Formula:
     return _standardize_helper(formula, {})
 
 def _standardize_helper(f: Formula, env: Dict[str, str]) -> Formula:
-    if isinstance(f, Var):
-        return Var(env.get(f.name, f.name))
-
     if isinstance(f, ForAll):
         new_var = _fresh_var(f.var)
         new_env = env.copy()
@@ -140,15 +137,28 @@ def _standardize_helper(f: Formula, env: Dict[str, str]) -> Formula:
 
     if isinstance(f, And):
         return And(_standardize_helper(f.left, env), _standardize_helper(f.right, env))
+
     if isinstance(f, Or):
         return Or(_standardize_helper(f.left, env), _standardize_helper(f.right, env))
+
     if isinstance(f, Implies):
         return Implies(_standardize_helper(f.provided, env), _standardize_helper(f.then, env))
+
     if isinstance(f, Iff):
         return Iff(_standardize_helper(f.left, env), _standardize_helper(f.right, env))
 
-    return f
+    if isinstance(f, Literal):
+        new_args = []
+        for arg in f.args:
+            if isinstance(arg, Var):
+                var_name = env.get(arg.name, arg.name)
+                new_args.append(Var(var_name))
+            else:
+                new_args.append(arg)
+        return Literal(f.name, tuple(new_args), f.positive)
 
+
+    raise TypeError(f"Unexpected formula node: {f}")
 
 def _to_prenex(f: Formula) -> Formula:
     quantifiers, matrix = _pull_quantifiers(f) # Gets a list of quantifiers in order and the formula that follows without any quantifiers
@@ -178,16 +188,47 @@ def _pull_quantifiers(f: Formula) -> tuple[list[Union[ForAll, Exists]], Formula]
 
     
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
-    # Example: (P ↔ ¬Q) → R
-    f = Implies(
-        Iff(Var("P"), Not(Var("Q"))),
-        Var("R")
-        )
+    # Example 1: ¬(P ∨ Q)
+    P = Literal("P", ())
+    Q = Literal("Q", ())
+    formula1 = Not(Or(P, Q))
+    print("Original formula 1:", formula1)
 
-    print(_push_not_inward(_eliminate_iff_imp(f)))
+    cnf1 = clausal_form_converter(formula1)
+    print("\nCNF 1:")
+    print(cnf1)
 
-    assert _push_not_inward(Not(Not(Var("P")))) == Var("P")
-    print(str(_push_not_inward(Not(And(Var("P"),Var("Q"))))))
+    # Example 2: ∀x ∃y. P(x, y)
+    f = ForAll("x", Exists("y", Literal("P", (Var("x"), Var("y")))))
+    print("\nOriginal formula 2:", f)
 
+    cnf2 = clausal_form_converter(f)
+    print("\nCNF 2:")
+    print(cnf2)
+
+    # Example 3: (P ↔ ¬Q) → R
+    formula3 = Implies(Iff(P, Not(Q)), Literal("R", ()))
+    print("\nOriginal formula 3:", formula3)
+
+    cnf3 = clausal_form_converter(formula3)
+    print("\nCNF 3:")
+    print(cnf3)
+
+    P = lambda x: Literal("P", (x,))
+    Q = lambda x, y: Literal("Q", (x, y))
+    R = lambda z: Literal("R", (z,))
+
+    inner_disjunction = Or(P(Var("x")), Exists("y", Q(Var("x"), Var("y"))))
+    left_branch = ForAll("x", inner_disjunction)
+    right_branch = Exists("z", R(Var("z")))
+
+    formula = And(left_branch, right_branch)
+
+    print("Original formula:")
+    print(formula)
+
+    cnf = clausal_form_converter(formula)
+    print("\nCNF:")
+    print(cnf)
