@@ -5,6 +5,9 @@ from itertools import count
 
 _var_counter = count()
 
+UNIVERSAL = "u"
+EXISTENTIAL = "e"
+CONSTANT = "c"
 
 
 
@@ -12,13 +15,13 @@ def clausal_form_converter(formula: Formula) -> List[Clause]:
     f1 = _eliminate_iff_imp(formula)
     f2 = _push_not_inward(f1)
     f3 = _standardize_vars(f2)
-    f4 = _to_prenex(f3)
-    #f5 = _skolemize(f4)
+    f4 = _skolemize(f3)
+    f5 = _to_prenex(f4)
     #f6 = _drop_universals(f5)
     #f7 = _distribute_or_over_and(f6)
     #flat = _flatten_ands(f7)
     #return _extract_clauses(flat)
-    return f4
+    return f5
 
 def _eliminate_iff_imp(formula: Formula) -> Formula:
     f = _eliminate_iff(formula)
@@ -113,76 +116,124 @@ def _push_not_inward(f: Formula) -> Formula:
     
     return f # Literal
 
-def _fresh_var(base: str) -> str:
-    return f"{base}_{next(_var_counter)}"
 
 def _standardize_vars(formula: Formula) -> Formula:
     return _standardize_helper(formula, {})
 
-def _standardize_helper(f: Formula, env: Dict[str, str]) -> Formula:
-    if isinstance(f, ForAll):
-        new_var = _fresh_var(f.var)
-        new_env = env.copy()
-        new_env[f.var] = new_var
-        return ForAll(new_var, _standardize_helper(f.sub, new_env))
+def _standardize_helper(f: Formula, env: Dict[Var, Var]) -> Formula:
+    if isinstance(f, ForAll) or isinstance(f, Exists):
+        old_var = f.var
+        new_name = f"{old_var.name}_{next(_var_counter)}"
+        new_var = Var(name=new_name, type=old_var.type, domain=old_var.domain)
 
-    if isinstance(f, Exists):
-        new_var = _fresh_var(f.var)
         new_env = env.copy()
-        new_env[f.var] = new_var
-        return Exists(new_var, _standardize_helper(f.sub, new_env))
+        new_env[old_var] = new_var
 
-    if isinstance(f, Not):
+        return type(f)(new_var, _standardize_helper(f.sub, new_env))
+
+    elif isinstance(f, Not):
         return Not(_standardize_helper(f.sub, env))
 
-    if isinstance(f, And):
-        return And(_standardize_helper(f.left, env), _standardize_helper(f.right, env))
+    elif isinstance(f, And):
+        return And(
+            _standardize_helper(f.left, env),
+            _standardize_helper(f.right, env)
+        )
 
-    if isinstance(f, Or):
-        return Or(_standardize_helper(f.left, env), _standardize_helper(f.right, env))
+    elif isinstance(f, Or):
+        return Or(
+            _standardize_helper(f.left, env),
+            _standardize_helper(f.right, env)
+        )
 
-    if isinstance(f, Implies):
-        return Implies(_standardize_helper(f.provided, env), _standardize_helper(f.then, env))
-
-    if isinstance(f, Iff):
-        return Iff(_standardize_helper(f.left, env), _standardize_helper(f.right, env))
-
-    if isinstance(f, Literal):
+    elif isinstance(f, Literal):
         new_args = []
         for arg in f.args:
             if isinstance(arg, Var):
-                var_name = env.get(arg.name, arg.name)
-                new_args.append(Var(var_name))
+                if arg in env:
+                    new_args.append(env[arg])
+                else:
+                    new_args.append(arg)
             else:
                 new_args.append(arg)
-        return Literal(f.name, tuple(new_args), f.positive)
 
+        new_args = tuple(new_args)
+        return Literal(f.name, new_args, f.positive)
 
-    raise TypeError(f"Unexpected formula node: {f}")
+    return f
+        
+
+def _skolemize(f: Formula) -> Formula:
+    return _skolemize_helper(f, [], {})
+
+def _skolemize_helper(f: Formula, uvars: List[Var], env: Dict[str, Any]) -> Formula:
+    if isinstance(f, ForAll):
+        new_sub = _skolemize_helper(f.sub, uvars + [f.var], env)
+        return ForAll(f.var, new_sub)
+
+    elif isinstance(f, Exists):
+        name = f"sk_{next(_var_counter)}"
+        if uvars:
+            sk_term = Function(name="f"+name, args=tuple(uvars), range=f.var.type)
+        else:
+            sk_term = Var(name="c"+name, type=CONSTANT, domain=f.domain)
+
+        new_env = env.copy()
+        new_env[f.var.name] = sk_term
+        return _skolemize_helper(f.sub, uvars, new_env)
+
+    elif isinstance(f, Literal):
+        new_args = []
+        for arg in f.args:
+            if isinstance(arg, Var):
+                if arg.name in env:
+                    new_args.append(env[arg.name])
+                else:
+                    new_args.append(arg)
+            else:
+                new_args.append(arg)
+        new_args = tuple(new_args)
+        return Literal(f.name, new_args, f.positive)
+
+    elif isinstance(f, Not):
+        return Not(_skolemize_helper(f.sub, uvars, env))
+
+    elif isinstance(f, And):
+        return And(
+            _skolemize_helper(f.left, uvars, env),
+            _skolemize_helper(f.right, uvars, env)
+        )
+
+    elif isinstance(f, Or):
+        return Or(
+            _skolemize_helper(f.left, uvars, env),
+            _skolemize_helper(f.right, uvars, env)
+        )
+
+    return f
+
 
 def _to_prenex(f: Formula) -> Formula:
-    quantifiers, matrix = _pull_quantifiers(f) # Gets a list of quantifiers in order and the formula that follows without any quantifiers
-    # Rebuilds the statements starting with the quantifiers from right to left
-    for q in reversed(quantifiers):
-        if isinstance(q, ForAll):
-            matrix = ForAll(q.var, matrix)
-        else:
-            matrix = Exists(q.var, matrix)
-    return matrix
+    quantifiers, body = _pull_quantifiers(f) 
+    for q in quantifiers:
+        body = ForAll(q.var, body)
+    return body
 
-def _pull_quantifiers(f: Formula) -> tuple[list[Union[ForAll, Exists]], Formula]:
-    #Remove the quantifier and ands it into a list to preserve order
-    if isinstance(f, (ForAll, Exists)):
+def _pull_quantifiers(f: Formula) -> tuple[list[ForAll], Formula]:
+    if isinstance(f, ForAll):
         qs, body = _pull_quantifiers(f.sub)
-        return [f] + qs, body
+        qs.append(f)
+        return qs, body
     elif isinstance(f, And):
         ql1, f1 = _pull_quantifiers(f.left)
         ql2, f2 = _pull_quantifiers(f.right)
-        return ql1 + ql2, And(f1, f2)
+        ql1.extend(ql2)
+        return ql1, And(f1, f2)
     elif isinstance(f, Or):
         ql1, f1 = _pull_quantifiers(f.left)
         ql2, f2 = _pull_quantifiers(f.right)
-        return ql1 + ql2, Or(f1, f2)
+        ql1.extend(ql2)
+        return ql1, Or(f1, f2)
     else:
         return [], f
 
@@ -200,8 +251,12 @@ if __name__ == "__main__":
     print("\nCNF 1:")
     print(cnf1)
 
+    x = Var("x", UNIVERSAL)
+    x_sm = Var("x", EXISTENTIAL)
+    y = Var("y", EXISTENTIAL)
+    z = Var("z", EXISTENTIAL)
     # Example 2: ∀x ∃y. P(x, y)
-    f = ForAll("x", Exists("y", Literal("P", (Var("x"), Var("y")))))
+    f = ForAll(x, Exists(y, Literal("P", (x, y))))
     print("\nOriginal formula 2:", f)
 
     cnf2 = clausal_form_converter(f)
@@ -216,13 +271,13 @@ if __name__ == "__main__":
     print("\nCNF 3:")
     print(cnf3)
 
-    P = lambda x: Literal("P", (x,))
-    Q = lambda x, y: Literal("Q", (x, y))
-    R = lambda z: Literal("R", (z,))
+    P = Literal("P", (x,))
+    Q = Literal("Q", (x, y))
+    R = Literal("R", (x_sm,))
 
-    inner_disjunction = Or(P(Var("x")), Exists("y", Q(Var("x"), Var("y"))))
-    left_branch = ForAll("x", inner_disjunction)
-    right_branch = Exists("z", R(Var("z")))
+    inner_disjunction = Or(P, Exists(y, Q))
+    left_branch = ForAll(x, inner_disjunction)
+    right_branch = Exists(x_sm, R)
 
     formula = And(left_branch, right_branch)
 
@@ -232,3 +287,35 @@ if __name__ == "__main__":
     cnf = clausal_form_converter(formula)
     print("\nCNF:")
     print(cnf)
+
+    Pxy = Literal("P", (x, y))
+    Qxyz = Literal("Q", (x, y, z))
+
+    inner_exists = Exists(z, Qxyz)
+    inner_or = Or(Pxy, inner_exists)
+    inner_and = And(Exists(y, inner_or), Literal("R", ()))  # Include a grounded literal for contrast
+    formula = ForAll(x, inner_and)
+
+    print("Challenging Skolemization Test:")
+    print("Original:")
+    print(formula)
+
+    skolemized = clausal_form_converter(formula)
+    print("\nAfter Skolemization:")
+    print(skolemized)
+
+    x = Var("x", UNIVERSAL)
+    z = Var("z", UNIVERSAL)
+    y = Var("y", EXISTENTIAL)
+
+    Rxyz = Literal("R", (x, y, z))
+    formula = ForAll(x, ForAll(z, Exists(y, Rxyz)))
+
+    print("\nMultiple Universal Quantifiers — Skolem Function with Multiple Args:")
+    print("Original formula:")
+    print(formula)
+
+    transformed = clausal_form_converter(formula)
+    print("\nAfter Skolemization:")
+    print(transformed)
+

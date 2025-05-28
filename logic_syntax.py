@@ -1,24 +1,24 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Tuple, Union, Any
+from typing import Tuple, Union, Any, Optional
 from structure import Literal
     
 @dataclass(frozen=True)
 class Var:
     name: str
+    type: str
+    domain: str = None
     def __str__(self):
         return f"{self.name}"
 
-
 @dataclass(frozen=True)
-class Const:
+class Function:
     name: str
-    value: Any = None
+    args: Tuple[Var, ...]
+    range: str = None
 
-@dataclass(frozen=True)
-class Func:
-    name: str
-    args: Tuple[Term, ...]
+    def __str__(self):
+        return f"{self.name}({', '.join(map(str, self.args))})"
 
 @dataclass(frozen=True)
 class Not:
@@ -45,31 +45,31 @@ class Implies:
     provided: Formula
     then: Formula
     def __str__(self):
-        return f"({self.provided} → {self.then})"
+        return f"{self.provided} → {self.then}"
 
 @dataclass(frozen=True)
 class Iff:
     left: Formula
     right: Formula
     def __str__(self):
-        return f"({self.left} ↔ {self.right})"
+        return f"{self.left} ↔ {self.right}"
 
 @dataclass(frozen=True)
 class ForAll:
-    var: str
+    var: Var
     sub: Formula
+    domain: str = None
     def __str__(self):
-        return f"∀{self.var}.({self.sub})"
+        return f"∀{self.var}.{self.sub}"
 
 @dataclass(frozen=True)
 class Exists:
-    var: str
+    var: Var
     sub: Formula
+    domain: str = None
     def __str__(self):
-        return f"∃{self.var}.({self.sub})"
+        return f"∃{self.var.name}.{self.sub}"
 
-
-Term = Union[Var, Const, Func]
 
 Formula = Union[
     Literal, Not, And, Or, Implies, Iff,
