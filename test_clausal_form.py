@@ -1,7 +1,7 @@
 import pytest
 from logic_syntax import Var, Not, And, Or, Implies, Iff, ForAll, Exists, Function
-from structure import Literal
-from clausal_form import _eliminate_iff_imp, _eliminate_iff, _eliminate_imp, _push_not_inward, _standardize_vars, _skolemize, _to_prenex, _drop_universals, _distribute_or_over_and
+from structure import Literal, Clause
+from clausal_form import _eliminate_iff_imp, _eliminate_iff, _eliminate_imp, _push_not_inward, _standardize_vars, _skolemize, _to_prenex, _drop_universals, _distribute_or_over_and, _extract_clauses
 
 UNIVERSAL = "u"
 EXISTENTIAL = "e"
@@ -415,3 +415,58 @@ def test_nested_distribution():
     assert isinstance(result, And)
     assert isinstance(result.left, Or)
     assert isinstance(result.right, Or)
+
+# Extract Clauses Tests
+
+def test_extract_clauses_from_simple_and():
+    x = Var("x", UNIVERSAL)
+    y = Var("y", UNIVERSAL)
+    P = Literal("P", (x,))
+    Q = Literal("Q", (y,))
+
+    f = And(P, Q)
+    clauses = _extract_clauses(f)
+
+    assert len(clauses) == 2
+    assert Clause({P}) in clauses
+    assert Clause({Q}) in clauses
+
+def test_extract_clauses_from_or():
+    x = Var("x", UNIVERSAL)
+    y = Var("y", UNIVERSAL)
+    P = Literal("P", (x,))
+    Q = Literal("Q", (y,))
+
+    f = Or(P, Q)
+    clauses = _extract_clauses(f)
+
+    assert len(clauses) == 1
+    assert Clause({P, Q}) == clauses[0]
+
+def test_extract_clauses_from_nested_and_or():
+    x = Var("x", UNIVERSAL)
+    y = Var("y", UNIVERSAL)
+    z = Var("z", UNIVERSAL)
+    P = Literal("P", (x,))
+    Q = Literal("Q", (y,))
+    R = Literal("R", (z,))
+
+    f = And(Or(P, Q), Or(Q, R))
+    clauses = _extract_clauses(f)
+
+    assert len(clauses) == 2
+    assert Clause({P, Q}) in clauses
+    assert Clause({Q, R}) in clauses
+
+def test_extract_clauses_with_negation():
+    x = Var("x", UNIVERSAL)
+    y = Var("y", UNIVERSAL)
+    P = Literal("P", (x,))
+    Q = Literal("Q", (y,))
+
+    f = And(Or(P, Not(Q)), Q)
+    clauses = _extract_clauses(f)
+
+    assert len(clauses) == 2
+    assert Clause({P, Not(Q)}) in clauses
+    assert Clause({Q}) in clauses

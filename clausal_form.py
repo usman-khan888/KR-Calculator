@@ -19,9 +19,7 @@ def clausal_form_converter(formula: Formula) -> List[Clause]:
     f5 = _to_prenex(f4)
     f6 = _drop_universals(f5)
     f7 = _distribute_or_over_and(f6)
-    #flat = _flatten_ands(f7)
-    #return _extract_clauses(flat)
-    return f7
+    return _extract_clauses(f7)
 
 def _eliminate_iff_imp(formula: Formula) -> Formula:
     f = _eliminate_iff(formula)
@@ -148,14 +146,29 @@ def _standardize_helper(f: Formula, env: Dict[Var, Var]) -> Formula:
                     new_args.append(env[arg])
                 else:
                     new_args.append(arg)
+            elif isinstance(arg, Function):
+                standardized_func = _nested_standardize_function(arg, env)
+                new_args.append(standardized_func)
             else:
                 new_args.append(arg)
 
         new_args = tuple(new_args)
         return Literal(f.name, new_args, f.positive)
-
     return f
+    
         
+def _nested_standardize_function(f: Function, env: Dict[Var, Var]) -> Function:
+    new_args = []
+    for a in f.args:
+        if isinstance(a, Var) and a in env:
+            new_args.append(env[a])
+        elif isinstance(a, Function):
+            new_args.append(_nested_standardize_function(a, env))
+        else:
+            new_args.append(a)
+    return Function(f.name, tuple(new_args), f.range)
+
+
 
 def _skolemize(f: Formula) -> Formula:
     return _skolemize_helper(f, [], {})
@@ -176,6 +189,15 @@ def _skolemize_helper(f: Formula, uvars: List[Var], env: Dict[str, Any]) -> Form
         new_env[f.var.name] = sk_term
         return _skolemize_helper(f.sub, uvars, new_env)
 
+    elif isinstance(f, Not):
+        return Not(_skolemize_helper(f.sub, uvars, env))
+
+    elif isinstance(f, And):
+        return And(_skolemize_helper(f.left, uvars, env), _skolemize_helper(f.right, uvars, env))
+
+    elif isinstance(f, Or):
+        return Or(_skolemize_helper(f.left, uvars, env), _skolemize_helper(f.right, uvars, env))
+    
     elif isinstance(f, Literal):
         new_args = []
         for arg in f.args:
@@ -184,27 +206,30 @@ def _skolemize_helper(f: Formula, uvars: List[Var], env: Dict[str, Any]) -> Form
                     new_args.append(env[arg.name])
                 else:
                     new_args.append(arg)
+            elif isinstance(arg, Function):
+                skolemized_func = _nested_skolemize_function(arg, uvars, env)
+                new_args.append(skolemized_func)
             else:
                 new_args.append(arg)
         new_args = tuple(new_args)
         return Literal(f.name, new_args, f.positive)
 
-    elif isinstance(f, Not):
-        return Not(_skolemize_helper(f.sub, uvars, env))
-
-    elif isinstance(f, And):
-        return And(
-            _skolemize_helper(f.left, uvars, env),
-            _skolemize_helper(f.right, uvars, env)
-        )
-
-    elif isinstance(f, Or):
-        return Or(
-            _skolemize_helper(f.left, uvars, env),
-            _skolemize_helper(f.right, uvars, env)
-        )
-
     return f
+
+def _nested_skolemize_function(f: Function, uvars: List[Var], env: Dict[str, Any]) -> Function:
+    new_args = []
+    for arg in f.args:
+        if isinstance(arg, Var):
+            if arg.name in env:
+                new_args.append(env[arg.name])
+            else:
+                new_args.append(arg)
+        elif isinstance(arg, Function):
+            new_args.append(_nested_skolemize_function(arg, uvars, env))
+        else:
+            new_args.append(arg)
+
+    return Function(f.name, tuple(new_args), range=f.range)
 
 
 def _to_prenex(f: Formula) -> Formula:
@@ -267,138 +292,76 @@ def _distribute_or_over_and(f: Formula) -> Formula:
     
     return f
 
+def _extract_clauses(f: Formula) -> List[Clause]:
+    if isinstance(f, And):
+        return _extract_clauses(f.left) + _extract_clauses(f.right)
+    else:
+        return [Clause(frozenset(_collect_literals(f)))]
+
+def _collect_literals(f: Formula) -> List[Formula]:
+    if isinstance(f, Literal):
+        return [f]
+    elif isinstance(f, Not) and isinstance(f.sub, Literal):
+        return [f]
+    elif isinstance(f, Or):
+        return _collect_literals(f.left) + _collect_literals(f.right)
+    else:
+        raise ValueError(f"Expected Literal or Not(Literal) or Or, got: {type(f).__name__}")
+
 
 
 if __name__ == "__main__":
+    print("\n=== Image-Based Formula CNF Conversion ===")
 
-    # # Example 1: ¬(P ∨ Q)
-    # P = Literal("P", ())
-    # Q = Literal("Q", ())
-    # formula1 = Not(Or(P, Q))
-    # print("Original formula 1:", formula1)
+    # Variables
+    X = Var("X", UNIVERSAL)
+    Y = Var("Y", UNIVERSAL)
 
-    # cnf1 = clausal_form_converter(formula1)
-    # print("\nCNF 1:")
-    # print(cnf1)
+    # Terms and Literals
+    pX = Literal("p", (X,))
+    pY = Literal("p", (Y,))
+    p_fXY = Literal("p", (Function("f", (X, Y)),))
+    qXY = Literal("q", (X, Y))
 
-    # x = Var("x", UNIVERSAL)
-    # x_sm = Var("x", EXISTENTIAL)
-    # y = Var("y", EXISTENTIAL)
-    # z = Var("z", EXISTENTIAL)
-    # # Example 2: ∀x ∃y. P(x, y)
-    # f = ForAll(x, Exists(y, Literal("P", (x, y))))
-    # print("\nOriginal formula 2:", f)
+    # Inner formulas
+    forall1 = ForAll(Y, Implies(pY, p_fXY))
+    forall2 = ForAll(Y, And(Not(qXY), pY))
+    inner = And(forall1, Not(forall2))
 
-    # cnf2 = clausal_form_converter(f)
-    # print("\nCNF 2:")
-    # print(cnf2)
-
-    # # Example 3: (P ↔ ¬Q) → R
-    # formula3 = Implies(Iff(P, Not(Q)), Literal("R", ()))
-    # print("\nOriginal formula 3:", formula3)
-
-    # cnf3 = clausal_form_converter(formula3)
-    # print("\nCNF 3:")
-    # print(cnf3)
-
-    # P = Literal("P", (x,))
-    # Q = Literal("Q", (x, y))
-    # R = Literal("R", (x_sm,))
-
-    # inner_disjunction = Or(P, Exists(y, Q))
-    # left_branch = ForAll(x, inner_disjunction)
-    # right_branch = Exists(x_sm, R)
-
-    # formula = And(left_branch, right_branch)
-
-    # print("Original formula:")
-    # print(formula)
-
-    # cnf = clausal_form_converter(formula)
-    # print("\nCNF:")
-    # print(cnf)
-
-    # Pxy = Literal("P", (x, y))
-    # Qxyz = Literal("Q", (x, y, z))
-
-    # inner_exists = Exists(z, Qxyz)
-    # inner_or = Or(Pxy, inner_exists)
-    # inner_and = And(Exists(y, inner_or), Literal("R", ()))  # Include a grounded literal for contrast
-    # formula = ForAll(x, inner_and)
-
-    # print("Challenging Skolemization Test:")
-    # print("Original:")
-    # print(formula)
-
-    # skolemized = clausal_form_converter(formula)
-    # print("\nAfter Skolemization:")
-    # print(skolemized)
-
-    # x = Var("x", UNIVERSAL)
-    # z = Var("z", UNIVERSAL)
-    # y = Var("y", EXISTENTIAL)
-
-    # Rxyz = Literal("R", (x, y, z))
-    # formula = ForAll(x, ForAll(z, Exists(y, Rxyz)))
-
-    # print("\nMultiple Universal Quantifiers — Skolem Function with Multiple Args:")
-    # print("Original formula:")
-    # print(formula)
-
-    # transformed = clausal_form_converter(formula)
-    # print("\nAfter Skolemization:")
-    # print(transformed)
-
-    # print("\n=== Heavily Nested Quantifier Test ===")
-
-    # x = Var("x", UNIVERSAL)
-    # y = Var("y", EXISTENTIAL)
-    # z = Var("z", EXISTENTIAL)
-    # w = Var("w", UNIVERSAL)
-    # u = Var("u", UNIVERSAL)
-
-    # P = Literal("P", (y,))
-    # Q = Literal("Q", (x,))
-    # R = Literal("R", (z, w))
-    # S = Literal("S", (u, x))
-
-    # # Left branch: ∃y. P(y)
-    # left = Exists(y, P)
-
-    # # Right branch: (∀x. Q(x)) ∧ (∀w. (∃z. R(z, w) ∧ ∀u. S(u, x)))
-    # right_inner = And(Exists(z, R), ForAll(u, S))
-    # right = ForAll(x, And(Q, ForAll(w, right_inner)))
-
-    # # Full formula: left ∨ right
-    # formula = Or(left, right)
-
-    # print("Original formula:")
-    # print(formula)
-
-    # transformed = clausal_form_converter(formula)
-    # print("\nAfter Skolemization and Prenexing:")
-    # print(transformed)
-
-    print("\n=== Complex Distribution Test ===")
-
-    x = Var("x", UNIVERSAL)
-    y = Var("y", UNIVERSAL)
-    z = Var("z", UNIVERSAL)
-    w = Var("w", UNIVERSAL)
-
-    P = Literal("P", (x,))
-    Q = Literal("Q", (y,))
-    R = Literal("R", (z,))
-    S = Literal("S", (w,))
-
-    inner = Or(And(Q, R), S)         # (Q ∧ R) ∨ S
-    outer = Or(P, inner)             # P ∨ ((Q ∧ R) ∨ S)
+    implication = Implies(pX, inner)
+    formula = ForAll(X, implication)
 
     print("Original formula:")
-    print(outer)
+    print(formula)
 
-    distributed = clausal_form_converter(outer)
+    clauses = clausal_form_converter(formula)
 
-    print("\nAfter distribution:")
-    print(distributed)
+    print("\nAfter CNF Conversion:")
+    for i, clause in enumerate(clauses):
+        print(f"Clause {i+1}: {clause}")
+
+    print("\n=== Skolemization Inside Function Argument ===")
+
+    # Variables
+    x = Var("x", UNIVERSAL)
+    y = Var("y", EXISTENTIAL)
+
+    # Function term with a Var that will be skolemized
+    inner_func = Function("f", (x, y))      # f(x, y)
+    literal = Literal("p", (inner_func,))   # p(f(x, y))
+
+    # Wrap in quantifiers: ∀x ∃y. p(f(x, y))
+    formula = ForAll(x, Exists(y, literal))
+
+    print("Original formula:")
+    print(formula)
+
+    # Apply the full pipeline up to Skolemization
+    f1 = _eliminate_iff_imp(formula)
+    f2 = _push_not_inward(f1)
+    f3 = _standardize_vars(f2)
+    f4 = _skolemize(f3)
+
+    print("\nAfter Skolemization:")
+    print(f4)
 

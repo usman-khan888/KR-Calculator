@@ -21,7 +21,7 @@ class Var:
 @dataclass(frozen=True)
 class Function:
     name: str
-    args: Tuple[Var, ...]
+    args: Tuple[Var | Function, ...]
     range: str = None
 
     def __str__(self):

@@ -22,7 +22,7 @@ class Clause:
     literals: FrozenSet[Literal]
 
     def __str__(self) -> str:
-        return " ∨ ".join(map(str, self.literals))
+        return ", ".join(map(str, self.literals))
 
 class KB:
     def __init__(self, clauses: list[Clause] | None = None):
