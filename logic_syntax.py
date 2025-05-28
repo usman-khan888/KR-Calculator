@@ -8,8 +8,15 @@ class Var:
     name: str
     type: str
     domain: str = None
+
     def __str__(self):
-        return f"{self.name}"
+        return self.name
+
+    def __eq__(self, other):
+        return isinstance(other, Var) and self.name == other.name and self.type == other.type and self.domain == other.domain
+
+    def __hash__(self):
+        return hash((self.name, self.type, self.domain))
 
 @dataclass(frozen=True)
 class Function:
@@ -24,7 +31,7 @@ class Function:
 class Not:
     sub: Formula
     def __str__(self):
-        return f"¬({self.sub})"
+        return f"¬{self.sub}"
 
 @dataclass(frozen=True)
 class And:
@@ -45,14 +52,14 @@ class Implies:
     provided: Formula
     then: Formula
     def __str__(self):
-        return f"{self.provided} → {self.then}"
+        return f"({self.provided} → {self.then})"
 
 @dataclass(frozen=True)
 class Iff:
     left: Formula
     right: Formula
     def __str__(self):
-        return f"{self.left} ↔ {self.right}"
+        return f"({self.left} ↔ {self.right})"
 
 @dataclass(frozen=True)
 class ForAll:
@@ -60,7 +67,7 @@ class ForAll:
     sub: Formula
     domain: str = None
     def __str__(self):
-        return f"∀{self.var}.{self.sub}"
+        return f"∀{self.var}, {self.sub}"
 
 @dataclass(frozen=True)
 class Exists:
@@ -68,7 +75,7 @@ class Exists:
     sub: Formula
     domain: str = None
     def __str__(self):
-        return f"∃{self.var.name}.{self.sub}"
+        return f"∃{self.var.name}, {self.sub}"
 
 
 Formula = Union[

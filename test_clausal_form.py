@@ -1,7 +1,7 @@
 import pytest
 from logic_syntax import Var, Not, And, Or, Implies, Iff, ForAll, Exists, Function
 from structure import Literal
-from clausal_form import _eliminate_iff_imp, _eliminate_iff, _eliminate_imp, _push_not_inward, _standardize_vars, _skolemize, _to_prenex
+from clausal_form import _eliminate_iff_imp, _eliminate_iff, _eliminate_imp, _push_not_inward, _standardize_vars, _skolemize, _to_prenex, _drop_universals, _distribute_or_over_and
 
 UNIVERSAL = "u"
 EXISTENTIAL = "e"
@@ -326,3 +326,92 @@ def test_prenex_no_quantifiers():
     result = _to_prenex(f)
 
     assert result == f
+
+# Drop Universal tests
+
+def test_drop_single_forall():
+    x = Var("x", UNIVERSAL)
+    f = ForAll(x, Literal("P", (x,)))
+    result = _drop_universals(f)
+    assert isinstance(result, Literal)
+    assert result.name == "P"
+
+def test_drop_multiple_foralls():
+    x = Var("x", UNIVERSAL)
+    y = Var("y", UNIVERSAL)
+    inner = Literal("Q", (x, y))
+    f = ForAll(x, ForAll(y, inner))
+    result = _drop_universals(f)
+    assert isinstance(result, Literal)
+    assert result.name == "Q"
+    assert result.args == (x, y)
+
+def test_no_forall_to_drop():
+    x = Var("x", UNIVERSAL)
+    y = Var("y", UNIVERSAL)
+    f = Or(Literal("P", (x,)), Literal("Q", (y,)))
+    result = _drop_universals(f)
+    assert isinstance(result, Or)
+    assert result.left.name == "P"
+    assert result.right.name == "Q"
+
+# Distribute Or over And test
+
+def test_or_distributes_over_and_right():
+    x = Var("x", UNIVERSAL)
+    y = Var("y", UNIVERSAL)
+    z = Var("z", UNIVERSAL)
+
+    P = Literal("P", (x,))
+    Q = Literal("Q", (y,))
+    R = Literal("R", (z,))
+
+    f = Or(P, And(Q, R))
+    result = _distribute_or_over_and(f)
+
+    assert isinstance(result, And)
+    assert isinstance(result.left, Or)
+    assert isinstance(result.right, Or)
+    assert result.left.left == P
+    assert result.left.right == Q
+    assert result.right.left == P
+    assert result.right.right == R
+
+def test_or_distributes_over_and_left():
+    x = Var("x", UNIVERSAL)
+    y = Var("y", UNIVERSAL)
+    z = Var("z", UNIVERSAL)
+
+    P = Literal("P", (x,))
+    Q = Literal("Q", (y,))
+    R = Literal("R", (z,))
+
+    f = Or(And(Q, R), P)
+    result = _distribute_or_over_and(f)
+
+    assert isinstance(result, And)
+    assert isinstance(result.left, Or)
+    assert isinstance(result.right, Or)
+    assert result.left.left == Q
+    assert result.left.right == P
+    assert result.right.left == R
+    assert result.right.right == P
+
+def test_nested_distribution():
+    x = Var("x", UNIVERSAL)
+    y = Var("y", UNIVERSAL)
+    z = Var("z", UNIVERSAL)
+    w = Var("w", UNIVERSAL)
+
+    P = Literal("P", (x,))
+    Q = Literal("Q", (y,))
+    R = Literal("R", (z,))
+    S = Literal("S", (w,))
+
+    inner = Or(P, And(Q, R))
+    f = Or(inner, S)
+    result = _distribute_or_over_and(f)
+
+    assert isinstance(result, And)
+    assert isinstance(result.left, Or)
+    assert isinstance(result.right, Or)
