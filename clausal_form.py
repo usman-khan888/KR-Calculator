@@ -98,7 +98,10 @@ def _push_not_inward(f: Formula) -> Formula:
             # ¬∃x.A ≡ ∀x.¬A
             return ForAll(sub.var, _push_not_inward(Not(sub.sub)))
         
-        return f  # Not(Literal)
+        if isinstance(sub, Literal):
+            return sub.negate()
+        
+        return f
     
     if isinstance(f, And):
         return And(_push_not_inward(f.left), _push_not_inward(f.right))
@@ -183,7 +186,7 @@ def _skolemize_helper(f: Formula, uvars: List[Var], env: Dict[str, Any]) -> Form
         if uvars:
             sk_term = Function(name="f"+name, args=tuple(uvars), range=f.var.type)
         else:
-            sk_term = Var(name="c"+name, type=CONSTANT, domain=f.domain)
+            sk_term = Var(name="c"+name, type=CONSTANT, domain=f.var.domain)
 
         new_env = env.copy()
         new_env[f.var.name] = sk_term

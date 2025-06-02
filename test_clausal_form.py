@@ -1,7 +1,7 @@
 import pytest
 from logic_syntax import Var, Not, And, Or, Implies, Iff, ForAll, Exists, Function
 from structure import Literal, Clause
-from clausal_form import _eliminate_iff_imp, _eliminate_iff, _eliminate_imp, _push_not_inward, _standardize_vars, _skolemize, _to_prenex, _drop_universals, _distribute_or_over_and, _extract_clauses
+from clausal_form import _eliminate_iff_imp, _eliminate_iff, _eliminate_imp, _push_not_inward, _standardize_vars, _skolemize, _to_prenex, _drop_universals, _distribute_or_over_and, _extract_clauses, clausal_form_converter
 
 UNIVERSAL = "u"
 EXISTENTIAL = "e"
@@ -107,8 +107,8 @@ def test_push_not_on_and():
     result = _push_not_inward(f)
 
     assert isinstance(result, Or)
-    assert result.left == Not(A)
-    assert result.right == Not(B)
+    assert result.left == A.negate()
+    assert result.right == B.negate()
 
 def test_push_not_on_or():
     A = Literal("A", ())
@@ -117,8 +117,8 @@ def test_push_not_on_or():
     result = _push_not_inward(f)
 
     assert isinstance(result, And)
-    assert result.left == Not(A)
-    assert result.right == Not(B)
+    assert result.left == A.negate()
+    assert result.right == B.negate()
 
 from logic_syntax import ForAll, Exists, Var
 
@@ -130,8 +130,8 @@ def test_push_not_on_forall():
 
     assert isinstance(result, Exists)
     assert result.var == x
-    assert isinstance(result.sub, Not)
-    assert result.sub.sub == A
+    assert isinstance(result.sub, Literal)
+    assert result.sub == A.negate()
 
 def test_push_not_on_exists():
     x = Var("x", "e")
@@ -141,14 +141,14 @@ def test_push_not_on_exists():
 
     assert isinstance(result, ForAll)
     assert result.var == x
-    assert isinstance(result.sub, Not)
-    assert result.sub.sub == A
+    assert isinstance(result.sub, Literal)
+    assert result.sub == A.negate()
 
 def test_push_not_literal_remains():
     A = Literal("A", ())
     f = Not(A)
     result = _push_not_inward(f)
-    assert result == f
+    assert result == A.negate()
 
 # Standardize Vars Test
 
@@ -470,3 +470,69 @@ def test_extract_clauses_with_negation():
     assert len(clauses) == 2
     assert Clause({P, Not(Q)}) in clauses
     assert Clause({Q}) in clauses
+
+# Other Tests
+
+def test_full_pipeline_basic():
+    x = Var("x", UNIVERSAL)
+    y = Var("y", EXISTENTIAL)
+
+    formula = ForAll(x, Implies(Literal("P", (x,)), Exists(y, Literal("Q", (x, y)))))
+    clauses = clausal_form_converter(formula)
+
+    assert isinstance(clauses, list)
+    assert all(isinstance(c, Clause) for c in clauses)
+    assert any(any(lit.name == "Q" for lit in clause.literals) for clause in clauses)
+
+
+def test_skolem_naming_conventions():
+    x = Var("x", UNIVERSAL)
+    y = Var("y", EXISTENTIAL)
+
+    formula = ForAll(x, Exists(y, Literal("Q", (x, y))))
+    skolemized = _skolemize(_standardize_vars(_push_not_inward(_eliminate_iff_imp(formula))))
+    arg = skolemized.sub.args[1]
+
+    if isinstance(arg, Var):
+        assert arg.name.startswith("csk_")
+    elif isinstance(arg, Function):
+        assert arg.name.startswith("fsk_")
+    else:
+        assert False, "Unexpected Skolem term type"
+
+
+def test_deep_quantifier_nesting():
+    x = Var("x", UNIVERSAL)
+    y = Var("y", EXISTENTIAL)
+    z = Var("z", UNIVERSAL)
+
+    inner = ForAll(z, Literal("R", (x, y, z)))
+    exists = Exists(y, And(Literal("Q", (y,)), inner))
+    formula = ForAll(x, exists)
+
+    clauses = clausal_form_converter(formula)
+
+    assert all(isinstance(c, Clause) for c in clauses)
+    clause_str = "\n".join(str(c) for c in clauses)
+    assert "R" in clause_str
+    assert "Q" in clause_str
+
+
+def test_literal_negation_equivalence():
+    x = Var("x", UNIVERSAL)
+    lit1 = Not(Literal("P", (x,)))
+    lit1 = _push_not_inward(lit1)
+    lit2 = Literal("P", (x,), positive=False)
+
+    assert lit1 == lit2
+    assert hash(lit1) == hash(lit2)
+
+
+def test_clause_with_duplicate_literals():
+    x = Var("x", UNIVERSAL)
+    lit = Literal("P", (x,))
+    f = Or(lit, lit)
+
+    clauses = _extract_clauses(f)
+    assert len(clauses) == 1
+    assert Clause({lit}) in clauses
