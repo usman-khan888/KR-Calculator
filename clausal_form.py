@@ -304,8 +304,6 @@ def _extract_clauses(f: Formula) -> List[Clause]:
 def _collect_literals(f: Formula) -> List[Formula]:
     if isinstance(f, Literal):
         return [f]
-    elif isinstance(f, Not) and isinstance(f.sub, Literal):
-        return [f]
     elif isinstance(f, Or):
         return _collect_literals(f.left) + _collect_literals(f.right)
     else:
