@@ -463,12 +463,13 @@ def test_extract_clauses_with_negation():
     y = Var("y", UNIVERSAL)
     P = Literal("P", (x,))
     Q = Literal("Q", (y,))
+    NQ = Q.negate()
 
-    f = And(Or(P, Not(Q)), Q)
+    f = And(Or(P, NQ), Q)
     clauses = _extract_clauses(f)
 
     assert len(clauses) == 2
-    assert Clause({P, Not(Q)}) in clauses
+    assert Clause({P, NQ}) in clauses
     assert Clause({Q}) in clauses
 
 # Other Tests
