@@ -28,6 +28,18 @@ This is part of my broader goal to create accessible, free tech that expands opp
 
 ---
 
+---
+
+## Work in Progress
+
+1. Unifiying and substituting variables.
+2. Refutation Proof.
+3. Knowledge Base storage and Data Structure.
+4. Create Website where User can create KB's, convert logical statements into CNF and test statements under a system.
+4. Using LLM to help converst NL statements into logical statements that can be plugged into the CNF pipeline.
+
+---
+
 ## 🚀 Getting Started
 
 ### Requirements
@@ -38,5 +50,5 @@ This is part of my broader goal to create accessible, free tech that expands opp
 ```bash
 git clone https://github.com/usman-khan888/KR-Calculator.git
 cd KR-Calculator
-python main.py
+python resolution.py
 

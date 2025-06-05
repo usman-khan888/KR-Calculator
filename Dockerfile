@@ -48,5 +48,5 @@ COPY . .
 EXPOSE 8000
 
 # Run the application.
-CMD ["pytest", "test_clausal_form.py"]
+CMD ["python", "resolution.py"]
 

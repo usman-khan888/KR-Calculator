@@ -1,4 +1,13 @@
 from structure import *
+
+def resolve(c1: Clause, c2: Clause) -> List[Clause]:
+    #Implement
+    pass
+
+def refutation_proof(kb: KB, goal: Clause) -> bool:
+    #Implement
+    pass
+
         
     
 if __name__ == '__main__':
